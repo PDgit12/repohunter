@@ -9,6 +9,7 @@ from pathlib import Path
 from github_repohunter.architecture_agents import run_parallel_agents, render_architecture_markdown
 from github_repohunter.rag_engine import build_index, retrieve
 from github_repohunter.security_utils import validate_markdown_output_path
+from github_repohunter.llm_client import check_llm_status, get_llm_client
 
 
 # ANSI colors
@@ -92,6 +93,16 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
     if not args.json:
         print(_banner())
+        
+        # Show LLM status
+        llm_status = check_llm_status()
+        active_llm = llm_status['active']
+        if active_llm == "template":
+            print(f"  {Colors.YELLOW}⚠ No LLM backend available - using template mode{Colors.RESET}")
+            print(f"  {Colors.DIM}For AI-generated output, run 'ollama serve' or set OPENAI_API_KEY{Colors.RESET}\n")
+        else:
+            print(f"  {Colors.GREEN}✓ Using {active_llm.upper()} for AI generation{Colors.RESET}\n")
+        
         _print_section("Input Configuration")
         print(f"  {Colors.DIM}Product{Colors.RESET}       : {Colors.BOLD}{product}{Colors.RESET}")
         print(f"  {Colors.DIM}Requirement{Colors.RESET}   : {requirement[:100]}{'...' if len(requirement) > 100 else ''}")
@@ -190,19 +201,45 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
+    llm_status = check_llm_status()
     out = {
         "cwd": os.getcwd(),
         "index_exists": Path("github_repohunter/database/chroma").exists(),
         "server_module": "github_repohunter.server",
+        "llm": llm_status,
     }
     if getattr(args, "json", False):
         print(json.dumps(out, indent=2))
         return 0
     print(_banner())
     _print_section("Status")
-    print(f"Working directory : {out['cwd']}")
-    print(f"RAG index exists  : {out['index_exists']}")
-    print(f"Server module     : {out['server_module']}")
+    print(f"  {Colors.DIM}Working directory{Colors.RESET} : {out['cwd']}")
+    print(f"  {Colors.DIM}RAG index exists{Colors.RESET}  : {Colors.GREEN if out['index_exists'] else Colors.RED}{out['index_exists']}{Colors.RESET}")
+    print(f"  {Colors.DIM}Server module{Colors.RESET}     : {out['server_module']}")
+    
+    _print_section("LLM Backend")
+    ollama_ok = llm_status['ollama']['available']
+    openai_ok = llm_status['openai']['available']
+    active = llm_status['active']
+    
+    ollama_icon = f"{Colors.GREEN}✓{Colors.RESET}" if ollama_ok else f"{Colors.RED}✗{Colors.RESET}"
+    openai_icon = f"{Colors.GREEN}✓{Colors.RESET}" if openai_ok else f"{Colors.RED}✗{Colors.RESET}"
+    
+    print(f"  {ollama_icon} {Colors.CYAN}Ollama{Colors.RESET} (local/free)  : {'Ready' if ollama_ok else 'Not running'}")
+    if not ollama_ok:
+        print(f"      {Colors.DIM}→ Run: ollama serve && ollama pull llama3.2{Colors.RESET}")
+    
+    print(f"  {openai_icon} {Colors.CYAN}OpenAI{Colors.RESET} (API/paid)    : {'Ready' if openai_ok else 'Not configured'}")
+    if not openai_ok:
+        print(f"      {Colors.DIM}→ Set: export OPENAI_API_KEY=sk-...{Colors.RESET}")
+    
+    active_color = Colors.GREEN if active != "template" else Colors.YELLOW
+    print(f"\n  {Colors.BOLD}Active backend{Colors.RESET}: {active_color}{active.upper()}{Colors.RESET}")
+    
+    if active == "template":
+        print(f"\n  {Colors.YELLOW}⚠ Running in TEMPLATE mode (no LLM){Colors.RESET}")
+        print(f"  {Colors.DIM}For real AI-generated architecture, start Ollama or set OpenAI key{Colors.RESET}")
+    
     return 0
 
 

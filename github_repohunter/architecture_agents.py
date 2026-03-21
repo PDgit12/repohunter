@@ -1,13 +1,28 @@
 import asyncio
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+from github_repohunter.llm_client import get_llm_client, LLMClient, TemplateClient
 
 
 @dataclass
 class AgentOutput:
     agent: str
     content: str
+
+
+# Global LLM client (lazy initialized)
+_llm_client: LLMClient | None = None
+
+
+def _get_llm() -> LLMClient:
+    """Get or initialize the LLM client"""
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = get_llm_client()
+    return _llm_client
 
 
 def _repo_summary(requirement: str, repos: list[dict[str, Any]]) -> str:
@@ -24,69 +39,182 @@ def _repo_summary(requirement: str, repos: list[dict[str, Any]]) -> str:
 
 
 def _requirements_agent(requirement: str, stack_preferences: list[str] | None = None) -> AgentOutput:
+    """Analyze requirements and produce structured output"""
     prefs = ", ".join(stack_preferences or []) or "No explicit stack preferences"
-    return AgentOutput(
-        agent="requirements-analyst",
-        content=(
-            f"Primary objective: {requirement}\n"
-            f"Stack preferences: {prefs}\n"
-            "Success criteria:\n"
-            "- Modular, production-ready architecture.\n"
-            "- Clear boundaries between API, workers, storage, and observability.\n"
-            "- Copy-paste-ready implementation prompt."
-        ),
-    )
+    llm = _get_llm()
+    
+    if isinstance(llm, TemplateClient):
+        # Fallback template mode
+        return AgentOutput(
+            agent="requirements-analyst",
+            content=(
+                f"Primary objective: {requirement}\n"
+                f"Stack preferences: {prefs}\n"
+                "Success criteria:\n"
+                "- Modular, production-ready architecture.\n"
+                "- Clear boundaries between API, workers, storage, and observability.\n"
+                "- Copy-paste-ready implementation prompt."
+            ),
+        )
+    
+    prompt = f"""You are a senior requirements analyst. Analyze this product requirement and produce a structured analysis.
+
+REQUIREMENT: {requirement}
+STACK PREFERENCES: {prefs}
+
+Produce a concise analysis with:
+1. Primary objective (1-2 sentences)
+2. Key functional requirements (bullet points)
+3. Non-functional requirements (performance, security, scalability)
+4. Success criteria (measurable outcomes)
+5. Constraints and assumptions
+
+Be specific and actionable. No fluff."""
+
+    try:
+        response = llm.generate(prompt, system="You are a senior software architect specializing in requirements analysis.")
+        return AgentOutput(agent="requirements-analyst", content=response)
+    except Exception as e:
+        return AgentOutput(agent="requirements-analyst", content=f"[Error: {e}] Fallback: {requirement}")
 
 
 def _system_design_agent(requirement: str, repos: list[dict[str, Any]]) -> AgentOutput:
-    return AgentOutput(
-        agent="system-designer",
-        content=(
-            "Proposed topology:\n"
-            "- API Gateway + auth middleware\n"
-            "- Orchestrator service for workflow execution\n"
-            "- Parallel specialist agents (planner, backend, frontend, data, qa)\n"
-            "- Shared event bus + state store for inter-agent communication\n"
-            "- RAG knowledge service fed by validated repo corpus\n"
-            "- Artifact writer service that emits architecture.md and implementation prompt\n\n"
-            f"Repository grounding:\n{_repo_summary(requirement, repos)}"
-        ),
-    )
+    """Design system architecture based on requirement and similar repos"""
+    llm = _get_llm()
+    repo_context = _repo_summary(requirement, repos)
+    
+    if isinstance(llm, TemplateClient):
+        return AgentOutput(
+            agent="system-designer",
+            content=(
+                "Proposed topology:\n"
+                "- API Gateway + auth middleware\n"
+                "- Orchestrator service for workflow execution\n"
+                "- Parallel specialist agents (planner, backend, frontend, data, qa)\n"
+                "- Shared event bus + state store for inter-agent communication\n"
+                "- RAG knowledge service fed by validated repo corpus\n"
+                "- Artifact writer service that emits architecture.md and implementation prompt\n\n"
+                f"Repository grounding:\n{repo_context}"
+            ),
+        )
+    
+    prompt = f"""You are a senior system architect. Design the system architecture for this product.
+
+REQUIREMENT: {requirement}
+
+SIMILAR REPOSITORIES FOR REFERENCE:
+{repo_context}
+
+Produce a detailed system design including:
+1. High-level architecture diagram (describe in text)
+2. Core services/components and their responsibilities
+3. Data flow between components
+4. API design (key endpoints)
+5. Database schema design (key entities)
+6. Technology stack recommendations with justification
+7. Scalability considerations
+
+Be specific about technology choices. Reference patterns from the similar repositories where applicable."""
+
+    try:
+        response = llm.generate(prompt, system="You are a senior software architect with 15+ years experience designing scalable systems.")
+        return AgentOutput(agent="system-designer", content=response)
+    except Exception as e:
+        return AgentOutput(agent="system-designer", content=f"[Error: {e}] Fallback design needed")
 
 
 def _execution_planner_agent(requirement: str) -> AgentOutput:
-    return AgentOutput(
-        agent="execution-planner",
-        content=(
-            "Delivery phases:\n"
-            "1) Contracts: API schema, shared message format, event types.\n"
-            "2) Agent mesh: concurrent agent runtime with shared blackboard.\n"
-            "3) Architecture synthesis: deterministic markdown renderer + optional LLM polish.\n"
-            "4) Reliability: retries, timeouts, tracing, metrics.\n"
-            "5) CI/CD + tests + docs.\n"
-            f"Constraint anchor: {requirement}"
-        ),
-    )
+    """Plan execution phases and milestones"""
+    llm = _get_llm()
+    
+    if isinstance(llm, TemplateClient):
+        return AgentOutput(
+            agent="execution-planner",
+            content=(
+                "Delivery phases:\n"
+                "1) Contracts: API schema, shared message format, event types.\n"
+                "2) Agent mesh: concurrent agent runtime with shared blackboard.\n"
+                "3) Architecture synthesis: deterministic markdown renderer + optional LLM polish.\n"
+                "4) Reliability: retries, timeouts, tracing, metrics.\n"
+                "5) CI/CD + tests + docs.\n"
+                f"Constraint anchor: {requirement}"
+            ),
+        )
+    
+    prompt = f"""You are a senior engineering manager. Create an execution plan for building this product.
+
+REQUIREMENT: {requirement}
+
+Produce a detailed execution plan including:
+1. Development phases (with clear milestones)
+2. Task breakdown for each phase
+3. Dependencies between tasks
+4. Risk assessment and mitigation strategies
+5. Testing strategy (unit, integration, e2e)
+6. Deployment strategy (staging, production)
+7. Estimated timeline (in sprints/weeks)
+
+Be realistic about timelines. Identify critical path items."""
+
+    try:
+        response = llm.generate(prompt, system="You are a senior engineering manager with expertise in agile delivery.")
+        return AgentOutput(agent="execution-planner", content=response)
+    except Exception as e:
+        return AgentOutput(agent="execution-planner", content=f"[Error: {e}] Fallback plan needed")
 
 
-def _cross_review_agent(
-    agent_name: str,
-    board: dict[str, Any],
-) -> AgentOutput:
+def _cross_review_agent(agent_name: str, board: dict[str, Any]) -> AgentOutput:
+    """Review and critique other agents' outputs"""
+    llm = _get_llm()
     req = board.get("requirements-analyst", "")
     design = board.get("system-designer", "")
     plan = board.get("execution-planner", "")
-    critique = (
-        f"{agent_name} cross-review:\n"
-        f"- Requirement alignment check: {'PASS' if req else 'NEEDS_INPUT'}\n"
-        f"- Design completeness check: {'PASS' if design else 'NEEDS_INPUT'}\n"
-        f"- Execution feasibility check: {'PASS' if plan else 'NEEDS_INPUT'}\n"
-        "- Improvement actions:\n"
-        "  1) Add explicit API contracts between gateway/orchestrator.\n"
-        "  2) Define failure handling for each agent stage.\n"
-        "  3) Ensure artifact generation is deterministic when LLM unavailable."
-    )
-    return AgentOutput(agent=agent_name, content=critique)
+    
+    if isinstance(llm, TemplateClient):
+        critique = (
+            f"{agent_name} cross-review:\n"
+            f"- Requirement alignment check: {'PASS' if req else 'NEEDS_INPUT'}\n"
+            f"- Design completeness check: {'PASS' if design else 'NEEDS_INPUT'}\n"
+            f"- Execution feasibility check: {'PASS' if plan else 'NEEDS_INPUT'}\n"
+            "- Improvement actions:\n"
+            "  1) Add explicit API contracts between gateway/orchestrator.\n"
+            "  2) Define failure handling for each agent stage.\n"
+            "  3) Ensure artifact generation is deterministic when LLM unavailable."
+        )
+        return AgentOutput(agent=agent_name, content=critique)
+    
+    review_focus = {
+        "requirements-reviewer": "requirements completeness, clarity, and testability",
+        "design-reviewer": "architecture soundness, scalability, and maintainability", 
+        "execution-reviewer": "plan feasibility, risk coverage, and timeline realism"
+    }
+    
+    prompt = f"""You are a senior technical reviewer. Review the following outputs from other architects.
+
+REQUIREMENTS ANALYSIS:
+{req[:1500]}
+
+SYSTEM DESIGN:
+{design[:1500]}
+
+EXECUTION PLAN:
+{plan[:1500]}
+
+Your focus: {review_focus.get(agent_name, 'overall quality')}
+
+Provide a structured review:
+1. Strengths (what's good)
+2. Gaps (what's missing)
+3. Risks (potential issues)
+4. Recommendations (specific improvements)
+
+Be constructive and specific."""
+
+    try:
+        response = llm.generate(prompt, system=f"You are a {agent_name} conducting a technical review.")
+        return AgentOutput(agent=agent_name, content=response)
+    except Exception as e:
+        return AgentOutput(agent=agent_name, content=f"[Error: {e}] Review incomplete")
 
 
 async def run_parallel_agents(
@@ -120,18 +248,57 @@ async def run_parallel_agents(
         blackboard[out.agent] = out.content
 
     def _synthesis_agent(board: dict[str, Any]) -> AgentOutput:
-        return AgentOutput(
-            agent="synthesis-agent",
-            content=(
-                "Cross-agent synthesis:\n"
-                f"- Requirement signal captured: {board.get('requirement')}\n"
-                f"- Requirements constraints: {board.get('requirements-analyst', '')[:300]}\n"
-                f"- System topology draft: {board.get('system-designer', '')[:300]}\n"
-                f"- Execution phases draft: {board.get('execution-planner', '')[:300]}\n"
-                f"- Reviewer loop notes: {board.get('design-reviewer', '')[:240]}\n"
-                "Decision: keep parallel mesh + shared blackboard + artifact renderer as core architecture pattern."
-            ),
-        )
+        """Synthesize all agent outputs into final decisions"""
+        llm = _get_llm()
+        
+        if isinstance(llm, TemplateClient):
+            return AgentOutput(
+                agent="synthesis-agent",
+                content=(
+                    "Cross-agent synthesis:\n"
+                    f"- Requirement signal captured: {board.get('requirement')}\n"
+                    f"- Requirements constraints: {board.get('requirements-analyst', '')[:300]}\n"
+                    f"- System topology draft: {board.get('system-designer', '')[:300]}\n"
+                    f"- Execution phases draft: {board.get('execution-planner', '')[:300]}\n"
+                    f"- Reviewer loop notes: {board.get('design-reviewer', '')[:240]}\n"
+                    "Decision: keep parallel mesh + shared blackboard + artifact renderer as core architecture pattern."
+                ),
+            )
+        
+        prompt = f"""You are the chief architect synthesizing inputs from multiple specialist agents.
+
+ORIGINAL REQUIREMENT:
+{board.get('requirement')}
+
+REQUIREMENTS ANALYSIS:
+{board.get('requirements-analyst', '')[:2000]}
+
+SYSTEM DESIGN:
+{board.get('system-designer', '')[:2000]}
+
+EXECUTION PLAN:
+{board.get('execution-planner', '')[:2000]}
+
+REVIEW FEEDBACK:
+Requirements Review: {board.get('requirements-reviewer', '')[:800]}
+Design Review: {board.get('design-reviewer', '')[:800]}
+Execution Review: {board.get('execution-reviewer', '')[:800]}
+
+Synthesize all inputs into FINAL DECISIONS:
+1. Final architecture decision (what to build)
+2. Technology stack (final choices with brief justification)
+3. Key components and their interfaces
+4. Critical implementation priorities (ordered)
+5. Risk mitigations to implement
+6. Success metrics
+
+Be decisive. This is the final architecture document."""
+
+        try:
+            response = llm.generate(prompt, system="You are a chief software architect making final architecture decisions.")
+            return AgentOutput(agent="synthesis-agent", content=response)
+        except Exception as e:
+            return AgentOutput(agent="synthesis-agent", content=f"[Error: {e}] Synthesis incomplete")
 
     synthesis = await loop.run_in_executor(None, _synthesis_agent, blackboard)
     blackboard[synthesis.agent] = synthesis.content
