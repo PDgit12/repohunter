@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repohunter"
+version = "0.1.0"
+description = "Parallel-agent architecture blueprint generator"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Piyush Dua" }]
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic",
+  "python-dotenv",
+  "httpx",
+  "requests",
+  "chromadb",
+  "sentence-transformers",
+  "redis",
+]
+
+[project.scripts]
+repohunter = "github_repohunter.cli:main"
+
+[tool.setuptools]
+packages = ["github_repohunter"]

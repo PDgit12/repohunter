@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: repohunter-cloud
+    env: python
+    buildCommand: "pip install -r github_repohunter/requirements.txt"
+    startCommand: "python -m github_repohunter.scripts.cloud_inference_api"
+    envVars:
+      - key: FIREBASE_PROJECT_ID
+        value: ai-task-mvp-7729
+      - key: HF_TOKEN
+        fromContext: env
+      - key: PORT
+        value: 8000

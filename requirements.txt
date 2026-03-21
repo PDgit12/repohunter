@@ -1,0 +1,15 @@
+firebase-admin
+watchdog
+transformers
+datasets
+torch
+requests
+packaging>=20.0,<25.0
+python-dotenv
+beautifulsoup4
+fastapi
+uvicorn[standard]
+pydantic
+chromadb
+sentence-transformers
+redis

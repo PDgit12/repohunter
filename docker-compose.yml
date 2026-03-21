@@ -1,0 +1,39 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: repohunter-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - repohunter_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: repohunter-api
+    environment:
+      USE_CLOUD: "true"
+      CLOUD_EXPERT_ENDPOINT: "http://host.docker.internal:8000"
+      ALLOW_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+      ARCH_RATE_LIMIT_PER_MIN: "30"
+      REDIS_URL: "redis://redis:6379/0"
+      ARCHITECTURE_API_KEYS: "${ARCHITECTURE_API_KEYS:-demo_local_key_rotate_me}"
+      EXPERT_API_KEY: "${EXPERT_API_KEY:-replace_with_strong_random_secret}"
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    command: ["python", "-m", "github_repohunter.server"]
+
+volumes:
+  repohunter_redis_data:

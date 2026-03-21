@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+repohunter.egg-info/
+
+# Data & Large files
+*.log
+data/
+adapters/
+github_repohunter/database/
+*.safetensors
+adapter_config.json
+adapter_model.safetensors
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+service-account.json
+*.pem
+*.key
+firebase.json
+firestore.*
+
+# Demo outputs (keep one example)
+architecture.*.demo.md
+!architecture.demo.md
+
+# PID files
+*_pid.txt
+
+# Other docs we don't need
+PROJECT_DEEP_DIVE.md
+PROJECT_FUNCTIONING_AND_INTERVIEW_GUIDE.md
+TECHNICAL_TERMS_DEEP_DIVE.md
+task.md
