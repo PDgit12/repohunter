@@ -201,4 +201,3 @@ This gives explicit cross-agent interaction before `architecture.md` is emitted.
 - [ ] **Testing**: API and architecture artifact golden tests.
 
 ---
-*Created with ❤️ by Antigravity*
